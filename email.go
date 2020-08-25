@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"mime"
 	"net"
@@ -498,17 +499,17 @@ func (email *Email) AddAlternative(contentType contentType, body string) *Email 
 
 // AddAttachment allows you to add an attachment to the email message.
 // You can optionally provide a different name for the file.
-func (email *Email) AddAttachment(file string, name ...string) *Email {
+func (email *Email) AddAttachment(reader io.Reader, filename string) *Email {
 	if email.Error != nil {
 		return email
 	}
 
-	if len(name) > 1 {
-		email.Error = errors.New("Mail Error: Attach can only have a file and an optional name")
+	if len(filename) == 1 {
+		email.Error = errors.New("Must supply a filename")
 		return email
 	}
 
-	email.Error = email.attach(file, false, name...)
+	email.Error = email.attach(reader, false, filename)
 
 	return email
 }
@@ -532,41 +533,33 @@ func (email *Email) AddAttachmentBase64(b64File string, name string) *Email {
 
 // AddInline allows you to add an inline attachment to the email message.
 // You can optionally provide a different name for the file.
-func (email *Email) AddInline(file string, name ...string) *Email {
+func (email *Email) AddInline(reader io.Reader, filename string) *Email {
 	if email.Error != nil {
 		return email
 	}
 
-	if len(name) > 1 {
-		email.Error = errors.New("Mail Error: Inline can only have a file and an optional name")
+	if len(filename) == 0 {
+		email.Error = errors.New("Invalid filename")
 		return email
 	}
 
-	email.Error = email.attach(file, true, name...)
+	email.Error = email.attach(reader, true, filename)
 
 	return email
 }
 
 // attach does the low level attaching of the files
-func (email *Email) attach(f string, inline bool, name ...string) error {
+func (email *Email) attach(reader io.Reader, inline bool, filename string) error {
 	// Get the file data
-	data, err := ioutil.ReadFile(f)
+	data, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return errors.New("Mail Error: Failed to add file with following error: " + err.Error())
 	}
 
 	// get the file mime type
-	mimeType := mime.TypeByExtension(filepath.Ext(f))
+	mimeType := mime.TypeByExtension(filepath.Ext(filename))
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
-	}
-
-	// get the filename
-	_, filename := filepath.Split(f)
-
-	// if an alternative filename was provided, use that instead
-	if len(name) == 1 {
-		filename = name[0]
 	}
 
 	if inline {
